@@ -109,6 +109,11 @@ async function chat(conversationHistory, userMessage) {
     parts: [{ text: msg.content }],
   }));
 
+  // Gemini erfordert, dass die History mit 'user' beginnt
+  while (history.length > 0 && history[0].role === 'model') {
+    history.shift();
+  }
+
   const chatSession = model.startChat({ history });
 
   const result = await chatSession.sendMessage(userMessage);

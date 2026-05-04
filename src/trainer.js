@@ -82,6 +82,12 @@ async function trainerChat(conversationHistory, userMessage) {
     parts: [{ text: msg.content }],
   }));
 
+  // Gemini erfordert, dass die History mit 'user' beginnt.
+  // Falls die erste Nachricht vom Modell stammt (z.B. Begrüßung), entfernen wir führende 'model'-Nachrichten.
+  while (history.length > 0 && history[0].role === 'model') {
+    history.shift();
+  }
+
   const chatSession = model.startChat({ history });
   const result = await chatSession.sendMessage(userMessage);
   return result.response.text();
