@@ -1,0 +1,527 @@
+<!DOCTYPE html>
+<html lang="de">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>KWS Bot – Trainings-Modus</title>
+  <style>
+    * { box-sizing: border-box; margin: 0; padding: 0; }
+    body {
+      font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
+      background: #0f1923;
+      color: #e0e0e0;
+      min-height: 100vh;
+      display: flex;
+      flex-direction: column;
+      align-items: center;
+      padding: 24px 16px;
+    }
+
+    /* ── Login ── */
+    #login-screen {
+      width: 100%;
+      max-width: 400px;
+      margin: auto;
+      background: #1a2535;
+      border-radius: 16px;
+      padding: 32px;
+      border: 1px solid #2a3a4a;
+    }
+    #login-screen h1 { font-size: 22px; margin-bottom: 8px; color: #fff; }
+    #login-screen p { font-size: 14px; color: #888; margin-bottom: 24px; }
+    #token-input {
+      width: 100%;
+      background: #0f1923;
+      border: 1.5px solid #2a3a4a;
+      border-radius: 10px;
+      padding: 12px 14px;
+      color: #fff;
+      font-size: 14px;
+      margin-bottom: 12px;
+      outline: none;
+    }
+    #token-input:focus { border-color: #2a7d3f; }
+    #login-btn {
+      width: 100%;
+      background: #2a7d3f;
+      color: #fff;
+      border: none;
+      border-radius: 10px;
+      padding: 13px;
+      font-size: 15px;
+      font-weight: 600;
+      cursor: pointer;
+      transition: opacity 0.15s;
+    }
+    #login-btn:hover { opacity: 0.85; }
+    #login-error { color: #e53935; font-size: 13px; margin-top: 8px; display: none; }
+
+    /* ── Haupt-Layout ── */
+    #app { display: none; width: 100%; max-width: 720px; flex-direction: column; gap: 16px; }
+
+    /* ── Header ── */
+    .train-header {
+      background: #1a2535;
+      border-radius: 14px;
+      padding: 18px 22px;
+      border: 1px solid #2a3a4a;
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      flex-wrap: wrap;
+      gap: 12px;
+    }
+    .train-header-left h1 { font-size: 18px; color: #fff; }
+    .train-header-left p { font-size: 13px; color: #888; margin-top: 3px; }
+    .train-badge {
+      background: #2a7d3f22;
+      color: #4caf50;
+      border: 1px solid #2a7d3f;
+      border-radius: 20px;
+      padding: 5px 12px;
+      font-size: 12px;
+      font-weight: 600;
+    }
+
+    /* ── Info-Box ── */
+    .train-info {
+      background: #1a2535;
+      border: 1px solid #2a7d3f44;
+      border-radius: 12px;
+      padding: 14px 18px;
+      font-size: 13px;
+      color: #aaa;
+      line-height: 1.6;
+    }
+    .train-info strong { color: #4caf50; }
+
+    /* ── Chat ── */
+    #chat-area {
+      background: #1a2535;
+      border: 1px solid #2a3a4a;
+      border-radius: 14px;
+      overflow: hidden;
+      display: flex;
+      flex-direction: column;
+      min-height: 420px;
+      max-height: 60vh;
+    }
+    #messages {
+      flex: 1;
+      overflow-y: auto;
+      padding: 20px;
+      display: flex;
+      flex-direction: column;
+      gap: 14px;
+    }
+    #messages::-webkit-scrollbar { width: 4px; }
+    #messages::-webkit-scrollbar-thumb { background: #2a3a4a; border-radius: 4px; }
+
+    .msg { display: flex; gap: 10px; align-items: flex-start; }
+    .msg-bot { justify-content: flex-start; }
+    .msg-user { justify-content: flex-end; }
+
+    .msg-avatar {
+      width: 32px; height: 32px; min-width: 32px;
+      border-radius: 50%;
+      display: flex; align-items: center; justify-content: center;
+      font-size: 16px;
+      flex-shrink: 0;
+    }
+    .msg-bot .msg-avatar { background: #2a7d3f33; }
+    .msg-user .msg-avatar { background: #1565c033; order: 1; }
+
+    .msg-bubble {
+      max-width: 78%;
+      padding: 11px 16px;
+      border-radius: 14px;
+      font-size: 14px;
+      line-height: 1.6;
+    }
+    .msg-bot .msg-bubble {
+      background: #243040;
+      color: #e0e0e0;
+      border-bottom-left-radius: 4px;
+    }
+    .msg-user .msg-bubble {
+      background: #2a7d3f;
+      color: #fff;
+      border-bottom-right-radius: 4px;
+    }
+
+    /* Typing */
+    .typing-dots { display: flex; gap: 5px; padding: 4px 0; }
+    .typing-dot {
+      width: 7px; height: 7px;
+      background: #4caf50;
+      border-radius: 50%;
+      opacity: 0.5;
+      animation: bounce 1.2s infinite ease-in-out;
+    }
+    .typing-dot:nth-child(2) { animation-delay: 0.15s; }
+    .typing-dot:nth-child(3) { animation-delay: 0.3s; }
+    @keyframes bounce {
+      0%,60%,100% { transform: translateY(0); opacity: 0.5; }
+      30% { transform: translateY(-5px); opacity: 1; }
+    }
+
+    /* ── Input ── */
+    #input-area {
+      padding: 12px;
+      border-top: 1px solid #2a3a4a;
+      display: flex;
+      gap: 10px;
+      align-items: flex-end;
+      background: #151f2e;
+    }
+    #user-input {
+      flex: 1;
+      background: #0f1923;
+      border: 1.5px solid #2a3a4a;
+      border-radius: 10px;
+      padding: 10px 14px;
+      color: #fff;
+      font-size: 14px;
+      font-family: inherit;
+      resize: none;
+      outline: none;
+      min-height: 44px;
+      max-height: 120px;
+      line-height: 1.4;
+      transition: border-color 0.15s;
+    }
+    #user-input:focus { border-color: #2a7d3f; }
+    #user-input::placeholder { color: #444; }
+    #send-btn {
+      width: 42px; height: 42px;
+      background: #2a7d3f;
+      border: none;
+      border-radius: 10px;
+      cursor: pointer;
+      display: flex; align-items: center; justify-content: center;
+      flex-shrink: 0;
+      transition: opacity 0.15s;
+    }
+    #send-btn:hover:not(:disabled) { opacity: 0.85; }
+    #send-btn:disabled { opacity: 0.3; cursor: not-allowed; }
+
+    /* ── Aktions-Buttons ── */
+    .action-bar {
+      display: flex;
+      gap: 10px;
+      flex-wrap: wrap;
+    }
+    .btn-save {
+      flex: 1;
+      background: #2a7d3f;
+      color: #fff;
+      border: none;
+      border-radius: 10px;
+      padding: 13px 20px;
+      font-size: 14px;
+      font-weight: 600;
+      cursor: pointer;
+      transition: opacity 0.15s;
+    }
+    .btn-save:hover:not(:disabled) { opacity: 0.85; }
+    .btn-save:disabled { opacity: 0.35; cursor: not-allowed; }
+    .btn-reset {
+      background: #1a2535;
+      color: #aaa;
+      border: 1px solid #2a3a4a;
+      border-radius: 10px;
+      padding: 13px 20px;
+      font-size: 14px;
+      cursor: pointer;
+      transition: background 0.15s;
+    }
+    .btn-reset:hover { background: #243040; }
+
+    /* ── Erfolgsmeldung ── */
+    #save-result {
+      background: #1a2535;
+      border: 1px solid #2a7d3f;
+      border-radius: 12px;
+      padding: 16px 18px;
+      font-size: 13px;
+      line-height: 1.6;
+      display: none;
+    }
+    #save-result.visible { display: block; }
+    #save-result strong { color: #4caf50; font-size: 15px; }
+    #save-result pre {
+      background: #0f1923;
+      border-radius: 8px;
+      padding: 12px;
+      margin-top: 10px;
+      font-size: 12px;
+      color: #aaa;
+      overflow-x: auto;
+      white-space: pre-wrap;
+      max-height: 200px;
+      overflow-y: auto;
+    }
+
+    /* ── Counter ── */
+    #msg-counter {
+      font-size: 12px;
+      color: #555;
+      text-align: right;
+      padding: 4px 2px;
+    }
+  </style>
+</head>
+<body>
+
+<!-- Login -->
+<div id="login-screen">
+  <h1>🔐 Trainings-Modus</h1>
+  <p>Nur für Mitarbeiter der Kletterwelt Sauerland</p>
+  <input type="password" id="token-input" placeholder="Admin-Token eingeben" />
+  <button id="login-btn">Einloggen & Training starten</button>
+  <div id="login-error">Falsches Token. Bitte nochmal versuchen.</div>
+</div>
+
+<!-- App -->
+<div id="app">
+  <div class="train-header">
+    <div class="train-header-left">
+      <h1>🧠 Bot-Training</h1>
+      <p>Kletterwelt Sauerland · Wissens-Interview</p>
+    </div>
+    <span class="train-badge">● TRAININGS-MODUS</span>
+  </div>
+
+  <div class="train-info">
+    <strong>So funktioniert's:</strong> Der Bot stellt dir Fragen über die Kletterwelt Sauerland –
+    einfach so antworten wie du es einem Kunden erklären würdest.
+    Am Ende auf <strong>„Wissen speichern"</strong> klicken – der Bot lernt sofort dazu!
+  </div>
+
+  <div id="chat-area">
+    <div id="messages"></div>
+    <div id="input-area">
+      <textarea id="user-input" placeholder="Deine Antwort..." rows="1"></textarea>
+      <button id="send-btn">
+        <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="#fff" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round">
+          <line x1="22" y1="2" x2="11" y2="13"></line>
+          <polygon points="22 2 15 22 11 13 2 9 22 2"></polygon>
+        </svg>
+      </button>
+    </div>
+  </div>
+
+  <div id="msg-counter">0 Nachrichten in dieser Session</div>
+
+  <div class="action-bar">
+    <button class="btn-save" id="save-btn" disabled>💾 Wissen speichern & Bot updaten</button>
+    <button class="btn-reset" id="reset-btn">↺ Neue Session</button>
+  </div>
+
+  <div id="save-result"></div>
+</div>
+
+<script>
+  const API_BASE = window.location.origin;
+  let adminToken = '';
+  let history = [];
+  let isWaiting = false;
+
+  // ── Login ──
+  document.getElementById('login-btn').addEventListener('click', startTraining);
+  document.getElementById('token-input').addEventListener('keydown', e => {
+    if (e.key === 'Enter') startTraining();
+  });
+
+  async function startTraining() {
+    const token = document.getElementById('token-input').value.trim();
+    if (!token) return;
+
+    // Token testen
+    try {
+      const res = await fetch(`${API_BASE}/api/knowledge/reload`, {
+        headers: { 'Authorization': `Bearer ${token}` }
+      });
+      if (!res.ok) throw new Error('Unauthorized');
+      adminToken = token;
+    } catch {
+      document.getElementById('login-error').style.display = 'block';
+      return;
+    }
+
+    document.getElementById('login-screen').style.display = 'none';
+    document.getElementById('app').style.display = 'flex';
+
+    // Erstes Bot-Message: Training starten
+    await sendToBot('START_TRAINING_SESSION');
+  }
+
+  // ── Chat ──
+  const messagesEl = document.getElementById('messages');
+  const inputEl    = document.getElementById('user-input');
+  const sendBtn    = document.getElementById('send-btn');
+  const saveBtn    = document.getElementById('save-btn');
+  const counter    = document.getElementById('msg-counter');
+
+  function appendMessage(role, text) {
+    const div = document.createElement('div');
+    div.className = `msg msg-${role}`;
+    const avatar = role === 'bot' ? '🤖' : '👤';
+    div.innerHTML = `
+      <div class="msg-avatar">${avatar}</div>
+      <div class="msg-bubble">${text.replace(/\n/g, '<br>').replace(/\*\*(.*?)\*\*/g, '<strong>$1</strong>')}</div>
+    `;
+    messagesEl.appendChild(div);
+    messagesEl.scrollTop = messagesEl.scrollHeight;
+  }
+
+  function showTyping() {
+    const div = document.createElement('div');
+    div.className = 'msg msg-bot';
+    div.id = 'typing-indicator';
+    div.innerHTML = `
+      <div class="msg-avatar">🤖</div>
+      <div class="msg-bubble">
+        <div class="typing-dots">
+          <div class="typing-dot"></div>
+          <div class="typing-dot"></div>
+          <div class="typing-dot"></div>
+        </div>
+      </div>
+    `;
+    messagesEl.appendChild(div);
+    messagesEl.scrollTop = messagesEl.scrollHeight;
+  }
+
+  function removeTyping() {
+    document.getElementById('typing-indicator')?.remove();
+  }
+
+  function updateCounter() {
+    const userMsgs = history.filter(h => h.role === 'user').length;
+    counter.textContent = `${userMsgs} Antwort${userMsgs !== 1 ? 'en' : ''} gegeben in dieser Session`;
+    if (userMsgs >= 3) saveBtn.disabled = false;
+  }
+
+  async function sendToBot(userMsg) {
+    if (isWaiting) return;
+    isWaiting = true;
+    sendBtn.disabled = true;
+
+    // START_TRAINING_SESSION ist nur intern – kein User-Bubble
+    const isStart = userMsg === 'START_TRAINING_SESSION';
+
+    if (!isStart) {
+      appendMessage('user', userMsg);
+      history.push({ role: 'user', content: userMsg });
+    }
+
+    showTyping();
+
+    try {
+      const res = await fetch(`${API_BASE}/api/train/message`, {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+          'Authorization': `Bearer ${adminToken}`,
+        },
+        body: JSON.stringify({
+          message: isStart ? 'Hallo! Bitte starte das Interview.' : userMsg,
+          history: isStart ? [] : history.slice(0, -1),
+        }),
+      });
+
+      const data = await res.json();
+      removeTyping();
+
+      if (data.message) {
+        appendMessage('bot', data.message);
+        history.push({ role: 'assistant', content: data.message });
+        updateCounter();
+      }
+    } catch (err) {
+      removeTyping();
+      appendMessage('bot', '⚠️ Verbindungsfehler. Bitte Seite neu laden.');
+    }
+
+    isWaiting = false;
+    sendBtn.disabled = false;
+    inputEl.focus();
+  }
+
+  // Senden
+  sendBtn.addEventListener('click', () => {
+    const text = inputEl.value.trim();
+    if (!text) return;
+    inputEl.value = '';
+    inputEl.style.height = 'auto';
+    sendToBot(text);
+  });
+
+  inputEl.addEventListener('keydown', e => {
+    if (e.key === 'Enter' && !e.shiftKey) {
+      e.preventDefault();
+      sendBtn.click();
+    }
+  });
+
+  // Auto-resize Textarea
+  inputEl.addEventListener('input', () => {
+    inputEl.style.height = 'auto';
+    inputEl.style.height = Math.min(inputEl.scrollHeight, 120) + 'px';
+  });
+
+  // ── Speichern ──
+  document.getElementById('save-btn').addEventListener('click', async () => {
+    saveBtn.disabled = true;
+    saveBtn.textContent = '⏳ Wissen wird extrahiert…';
+
+    try {
+      const res = await fetch(`${API_BASE}/api/train/save`, {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+          'Authorization': `Bearer ${adminToken}`,
+        },
+        body: JSON.stringify({ history }),
+      });
+
+      const data = await res.json();
+      const resultEl = document.getElementById('save-result');
+
+      if (data.success) {
+        resultEl.innerHTML = `
+          <strong>✅ Erfolgreich gespeichert!</strong><br><br>
+          ${data.message}<br>
+          Datei: <code>${data.filename}</code>
+          <pre>${data.preview}...</pre>
+        `;
+        resultEl.classList.add('visible');
+        saveBtn.textContent = '✅ Gespeichert!';
+        appendMessage('bot', '🎉 Super! Das Wissen wurde gespeichert und ich bin ab sofort schlauer. Danke für deine Zeit!');
+      } else {
+        saveBtn.textContent = '💾 Wissen speichern & Bot updaten';
+        saveBtn.disabled = false;
+        alert(data.error || 'Fehler beim Speichern.');
+      }
+    } catch {
+      saveBtn.textContent = '💾 Wissen speichern & Bot updaten';
+      saveBtn.disabled = false;
+      alert('Netzwerkfehler beim Speichern.');
+    }
+  });
+
+  // ── Reset ──
+  document.getElementById('reset-btn').addEventListener('click', () => {
+    if (!confirm('Session zurücksetzen? Das bisherige ungespeicherte Gespräch geht verloren.')) return;
+    history = [];
+    messagesEl.innerHTML = '';
+    saveBtn.disabled = true;
+    saveBtn.textContent = '💾 Wissen speichern & Bot updaten';
+    document.getElementById('save-result').classList.remove('visible');
+    updateCounter();
+    sendToBot('START_TRAINING_SESSION');
+  });
+</script>
+</body>
+</html>
