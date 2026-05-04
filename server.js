@@ -16,8 +16,10 @@ const PORT = process.env.PORT || 3000;
 // CORS
 const allowedOrigins = [
   'http://localhost:3000',
-  'http://127.0.0.1:5500', // Live Server für lokale Entwicklung
-  process.env.ALLOWED_ORIGIN,
+  'http://127.0.0.1:5500',
+  'https://kws-bot.onrender.com', // Render-eigene Domain (train.html, demo.html)
+  process.env.ALLOWED_ORIGIN,     // KWS Website
+  process.env.RENDER_EXTERNAL_URL, // Automatisch von Render gesetzt
 ].filter(Boolean);
 
 app.use(cors({
