@@ -5,43 +5,78 @@ const path = require('path');
 
 const genAI = new GoogleGenerativeAI(process.env.GEMINI_API_KEY);
 
-// Themen die der Bot systematisch abfragt
-const TRAINING_TOPICS = [
+// Fallback-Themen wenn noch gar keine Wissensbasis existiert
+const FALLBACK_TOPICS = [
   'Öffnungszeiten (regulär, Wochenende, Feiertage, Schulferien)',
   'Parkplätze (Anzahl, kostenlos/kostenpflichtig, Behindertenparkplätze)',
-  'Anfahrt und Lage (Adresse, nächste Ausfahrt A45, ÖPNV)',
-  'Bistro-Angebot (Speisen, Getränke, Öffnungszeiten, vegane Optionen)',
-  'Team und Trainer (Namen, Qualifikationen, feste Ansprechpartner)',
+  'Anfahrt und Lage (Adresse, nächste Ausfahrt, ÖPNV)',
+  'Bistro-Angebot (Speisen, Getränke, vegane Optionen)',
+  'Team und Trainer (Namen, Qualifikationen)',
   'WLAN-Verfügbarkeit in der Halle',
-  'Online-Buchung und Reservierung (gibt es das, wie funktioniert es)',
-  'Garderoben und Schließfächer (vorhanden, Kosten, Schloss mitbringen?)',
+  'Online-Buchung und Reservierung',
+  'Garderoben und Schließfächer',
   'Duschen vorhanden (ja/nein, kostenlos?)',
-  'Kindergeburtstag Details (Preise, genaue Abläufe, Mindestalter, was mitbringen)',
+  'Kindergeburtstag Details (Preise, Abläufe, Mindestalter)',
   'Firmenrabatte oder Gruppenpreise',
-  'Jahresabo Details (Kündigung, Laufzeit, Vorteile)',
+  'Jahresabo Details (Kündigung, Laufzeit)',
   'Behindertengerechter Zugang',
   'Haustiere erlaubt',
-  'Fotografieren/Filmen in der Halle (erlaubt?)',
-  'Aktuelle Highlights oder Besonderheiten der Halle',
-  'Was macht KWS besonders im Vergleich zu anderen Hallen in der Region',
-  'Typische Besucher: Wer kommt zu euch? Familien, Sportler, Schulen?',
+  'Fotografieren/Filmen in der Halle',
 ];
 
-function buildTrainerSystemPrompt(existingKnowledge) {
-  // Wissensbasis komplett übergeben (bis 15.000 Zeichen), damit der Bot wirklich weiß was schon bekannt ist
+// KI analysiert die Wissensbasis und generiert eine individuelle Fragenliste
+async function generateMissingTopics(existingKnowledge) {
+  if (!existingKnowledge || existingKnowledge.trim().length < 100) {
+    return FALLBACK_TOPICS;
+  }
+
+  const model = genAI.getGenerativeModel({ model: 'gemini-2.5-flash' });
+
+  const prompt = `Du analysierst die Wissensbasis eines Chat-Bots für die Kletterwelt Sauerland (Kletter- und Boulderhalle in Altena).
+
+AKTUELLE WISSENSBASIS:
+${existingKnowledge.substring(0, 12000)}
+
+AUFGABE:
+Analysiere was in dieser Wissensbasis fehlt, lückenhaft oder veraltet sein könnte.
+Erstelle eine Liste mit maximal 12 konkreten Fragen/Themen, die ein Mitarbeiter noch beantworten sollte, um den Bot besser zu machen.
+
+Beachte dabei:
+- Was würde ein Besucher der Kletterwelt fragen, das der Bot noch nicht beantworten kann?
+- Welche Informationen sind unklar, unvollständig oder fehlen ganz?
+- Welche typischen Kletterhallen-Themen sind noch nicht abgedeckt?
+- Ignoriere Website-Artikel und Events – die werden automatisch gescannt.
+
+Antworte NUR mit einer nummerierten Liste, ein Thema pro Zeile, ohne Einleitung oder Erklärung.
+Beispielformat:
+1. Thema A (Details was genau fehlt)
+2. Thema B (Details was genau fehlt)`;
+
+  try {
+    const result = await model.generateContent(prompt);
+    const text = result.response.text().trim();
+
+    // Zeilen parsen: "1. Thema..." → ["Thema...", ...]
+    const topics = text
+      .split('\n')
+      .map(line => line.replace(/^\d+\.\s*/, '').trim())
+      .filter(line => line.length > 5);
+
+    if (topics.length >= 3) {
+      console.log(`[Trainer] KI hat ${topics.length} offene Themen identifiziert.`);
+      return topics;
+    }
+  } catch (err) {
+    console.error('[Trainer] Themen-Generierung fehlgeschlagen, nutze Fallback:', err.message);
+  }
+
+  return FALLBACK_TOPICS;
+}
+
+function buildTrainerSystemPrompt(openTopics, existingKnowledge) {
   const knowledgeSection = existingKnowledge
-    ? existingKnowledge.substring(0, 15000)
+    ? existingKnowledge.substring(0, 12000)
     : null;
-
-  // Prüfe welche Themen bereits in der Wissensbasis erwähnt werden
-  const coveredTopics = existingKnowledge
-    ? TRAINING_TOPICS.filter(topic => {
-        const keywords = topic.toLowerCase().split(/[\s,()\/]+/).filter(w => w.length > 3);
-        return keywords.some(kw => existingKnowledge.toLowerCase().includes(kw));
-      })
-    : [];
-
-  const openTopics = TRAINING_TOPICS.filter(t => !coveredTopics.includes(t));
 
   return `Du bist ein intelligenter Wissens-Interviewer für den Chat-Assistenten der Kletterwelt Sauerland.
 
@@ -56,21 +91,17 @@ STIL:
 - NIEMALS mehrere Fragen auf einmal stellen
 
 ${openTopics.length > 0
-  ? `OFFENE THEMEN (diese fehlen noch – bitte der Reihe nach abfragen):\n${openTopics.map((t, i) => `${i + 1}. ${t}`).join('\n')}`
-  : 'ALLE THEMEN SIND BEREITS BEKANNT – frage ob es Neuigkeiten oder Änderungen gibt.'}
+  ? `DIESE THEMEN SOLL DU HEUTE ABFRAGEN (der Reihe nach, wichtigstes zuerst):\n${openTopics.map((t, i) => `${i + 1}. ${t}`).join('\n')}`
+  : 'ALLE THEMEN SIND GUT ABGEDECKT – frage ob es aktuelle Neuigkeiten oder Änderungen gibt.'}
 
-${coveredTopics.length > 0
-  ? `BEREITS ABGEDECKTE THEMEN (NICHT nochmal fragen, außer zur Vertiefung):\n${coveredTopics.map(t => `✓ ${t}`).join('\n')}`
-  : ''}
-
-VOLLSTÄNDIGE WISSENSBASIS ZUR REFERENZ:
-${knowledgeSection ? knowledgeSection : 'Noch keine Wissensbasis vorhanden – fange mit Öffnungszeiten an.'}
+VOLLSTÄNDIGE WISSENSBASIS ZUR REFERENZ (bereits bekannt – NICHT nochmal fragen):
+${knowledgeSection ?? 'Noch keine Wissensbasis vorhanden – fange mit den Grundlagen an.'}
 
 WICHTIG:
-- Begrüße kurz und fang sofort mit dem ERSTEN offenen Thema an (nicht mit Öffnungszeiten wenn die schon bekannt sind!).
-- Bereits bekannte Themen NIEMALS nochmal fragen – auch nicht als Einstieg.
-- Frag nur was wirklich noch fehlt oder vertieft werden könnte.
-- Wenn du das Gefühl hast, genug für heute gelernt zu haben (nach ca. 10-15 Fragen), beende das Interview freundlich und sage dem Mitarbeiter er kann die Session speichern.`;
+- Begrüße kurz und fang sofort mit Thema 1 aus der Liste an.
+- Themen aus der Wissensbasis NIEMALS nochmal fragen.
+- Frag nur was wirklich noch fehlt.
+- Nach ca. 10–12 Fragen das Interview freundlich beenden und sagen, der Mitarbeiter kann speichern.`;
 }
 
 function buildExtractionPrompt(conversation) {
@@ -93,9 +124,18 @@ Antworte NUR mit dem Markdown-Inhalt, ohne Einleitung oder Erklärung.`;
 async function trainerChat(conversationHistory, userMessage) {
   const knowledge = loadKnowledge();
 
+  // Beim ersten Aufruf (leere History) die offenen Themen per KI generieren
+  let openTopics;
+  if (conversationHistory.length === 0) {
+    openTopics = await generateMissingTopics(knowledge);
+  } else {
+    // In laufender Session: Fallback (Themen wurden schon im System-Prompt übergeben)
+    openTopics = [];
+  }
+
   const model = genAI.getGenerativeModel({
     model: 'gemini-2.5-flash',
-    systemInstruction: buildTrainerSystemPrompt(knowledge),
+    systemInstruction: buildTrainerSystemPrompt(openTopics, knowledge),
   });
 
   const history = conversationHistory.map(msg => ({
@@ -104,8 +144,6 @@ async function trainerChat(conversationHistory, userMessage) {
   }));
 
   // Gemini erfordert, dass die History mit 'user' beginnt.
-  // Falls die erste Nachricht vom Modell stammt (z.B. Begrüßung), eine synthetische User-Nachricht voranstellen –
-  // so bleibt der Kontext erhalten und der Bot begrüßt nicht erneut.
   if (history.length > 0 && history[0].role === 'model') {
     history.unshift({ role: 'user', parts: [{ text: 'Starte das Interview.' }] });
   }
