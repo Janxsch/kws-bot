@@ -28,6 +28,21 @@ const TRAINING_TOPICS = [
 ];
 
 function buildTrainerSystemPrompt(existingKnowledge) {
+  // Wissensbasis komplett übergeben (bis 15.000 Zeichen), damit der Bot wirklich weiß was schon bekannt ist
+  const knowledgeSection = existingKnowledge
+    ? existingKnowledge.substring(0, 15000)
+    : null;
+
+  // Prüfe welche Themen bereits in der Wissensbasis erwähnt werden
+  const coveredTopics = existingKnowledge
+    ? TRAINING_TOPICS.filter(topic => {
+        const keywords = topic.toLowerCase().split(/[\s,()\/]+/).filter(w => w.length > 3);
+        return keywords.some(kw => existingKnowledge.toLowerCase().includes(kw));
+      })
+    : [];
+
+  const openTopics = TRAINING_TOPICS.filter(t => !coveredTopics.includes(t));
+
   return `Du bist ein intelligenter Wissens-Interviewer für den Chat-Assistenten der Kletterwelt Sauerland.
 
 DEINE AUFGABE:
@@ -40,15 +55,21 @@ STIL:
 - Wenn eine Antwort unklar ist, kurz nachfragen
 - NIEMALS mehrere Fragen auf einmal stellen
 
-THEMEN DIE NOCH FEHLEN ODER UNKLAR SIND:
-${TRAINING_TOPICS.map((t, i) => `${i + 1}. ${t}`).join('\n')}
+${openTopics.length > 0
+  ? `OFFENE THEMEN (diese fehlen noch – bitte der Reihe nach abfragen):\n${openTopics.map((t, i) => `${i + 1}. ${t}`).join('\n')}`
+  : 'ALLE THEMEN SIND BEREITS BEKANNT – frage ob es Neuigkeiten oder Änderungen gibt.'}
 
-BEREITS BEKANNTE INFORMATIONEN (diese Themen NICHT nochmal fragen):
-${existingKnowledge ? existingKnowledge.substring(0, 3000) + '...' : 'Noch keine Wissensbasis vorhanden.'}
+${coveredTopics.length > 0
+  ? `BEREITS ABGEDECKTE THEMEN (NICHT nochmal fragen, außer zur Vertiefung):\n${coveredTopics.map(t => `✓ ${t}`).join('\n')}`
+  : ''}
+
+VOLLSTÄNDIGE WISSENSBASIS ZUR REFERENZ:
+${knowledgeSection ? knowledgeSection : 'Noch keine Wissensbasis vorhanden – fange mit Öffnungszeiten an.'}
 
 WICHTIG:
-- Fange mit einer Begrüßung an und starte dann mit dem wichtigsten fehlenden Thema: Öffnungszeiten.
-- Arbeite die Liste systematisch durch aber frag nur was wirklich noch fehlt.
+- Begrüße kurz und fang sofort mit dem ERSTEN offenen Thema an (nicht mit Öffnungszeiten wenn die schon bekannt sind!).
+- Bereits bekannte Themen NIEMALS nochmal fragen – auch nicht als Einstieg.
+- Frag nur was wirklich noch fehlt oder vertieft werden könnte.
 - Wenn du das Gefühl hast, genug für heute gelernt zu haben (nach ca. 10-15 Fragen), beende das Interview freundlich und sage dem Mitarbeiter er kann die Session speichern.`;
 }
 
