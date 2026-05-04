@@ -83,9 +83,10 @@ async function trainerChat(conversationHistory, userMessage) {
   }));
 
   // Gemini erfordert, dass die History mit 'user' beginnt.
-  // Falls die erste Nachricht vom Modell stammt (z.B. Begrüßung), entfernen wir führende 'model'-Nachrichten.
-  while (history.length > 0 && history[0].role === 'model') {
-    history.shift();
+  // Falls die erste Nachricht vom Modell stammt (z.B. Begrüßung), eine synthetische User-Nachricht voranstellen –
+  // so bleibt der Kontext erhalten und der Bot begrüßt nicht erneut.
+  if (history.length > 0 && history[0].role === 'model') {
+    history.unshift({ role: 'user', parts: [{ text: 'Starte das Interview.' }] });
   }
 
   const chatSession = model.startChat({ history });

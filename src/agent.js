@@ -109,9 +109,10 @@ async function chat(conversationHistory, userMessage) {
     parts: [{ text: msg.content }],
   }));
 
-  // Gemini erfordert, dass die History mit 'user' beginnt
-  while (history.length > 0 && history[0].role === 'model') {
-    history.shift();
+  // Gemini erfordert, dass die History mit 'user' beginnt.
+  // Synthetische User-Nachricht voranstellen falls nötig.
+  if (history.length > 0 && history[0].role === 'model') {
+    history.unshift({ role: 'user', parts: [{ text: 'Hallo!' }] });
   }
 
   const chatSession = model.startChat({ history });
